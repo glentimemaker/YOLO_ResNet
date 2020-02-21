@@ -35,6 +35,13 @@ from keras.engine.topology import get_source_inputs
 from keras.callbacks import ModelCheckpoint
 from keras.optimizers import Adam
 
+if 'tensorflow' == K.backend():
+    import tensorflow as tf
+from keras.backend.tensorflow_backend import set_session
+config2 = tf.ConfigProto()
+config2.gpu_options.allow_growth = True
+set_session(tf.Session(config=config2))
+
 ### Below base code for the ResNet50 model is taken from https://github.com/fchollet/deep-learning-models.git
 ### it has been modified to have YOLO classifier in the end layers (see ResNet50() function)
 def identity_block(input_tensor, kernel_size, filters, stage, block):
@@ -623,6 +630,7 @@ def generator(label_keys, label_frames, batch_size=64, folder='udacity-object-de
 
             images = []
             gt = []
+            gt = []
             for batch_sample in batch_samples:
                 im, frame = augument_data(batch_sample, label_frames[batch_sample])
                 im = im.astype(np.float32)
@@ -652,6 +660,7 @@ if __name__ == '__main__':
     WIDTH_NORM = 224
     HEIGHT_NORM = 224
     GRID_NUM = 11
+    batch_size = 32
     X_SPAN = WIDTH_NORM/GRID_NUM
     Y_SPAN = HEIGHT_NORM/GRID_NUM
     X_NORM = WIDTH_NORM/GRID_NUM
@@ -672,23 +681,29 @@ if __name__ == '__main__':
 
     model = ResNet50(include_top=False, input_shape=(224,224,3),
                     load_weight=True, weights=weights_path)
+    model.summary()
+    for layer in model.layers[:-4]:
+        layer.trainable = False
 
     with open('label_frames.p', 'rb') as f:
         label_frames = pickle.load(f)
 
     label_keys = list(label_frames.keys())
     lbl_train, lbl_validn = train_test_split(label_keys, test_size=0.2)
+    print('lbl_train: ', len(lbl_train))
+    print('lbl_validn: ', len(lbl_validn))
 
     ### Intialize generator
-    train_generator = generator(lbl_train, label_frames)
-    validation_generator = generator(lbl_validn, label_frames)
+    train_generator = generator(lbl_train, label_frames, batch_size)
+    validation_generator = generator(lbl_validn, label_frames, batch_size)
 
     ### Compile model
     optimizer = Adam(lr=0.001)
     model.compile(optimizer=optimizer, loss=custom_loss)
-    model_checkpoint = ModelCheckpoint(filepath='models/' + save_prefix + str(learning_rate) + '_weights.{epoch:02d}-{val_loss:.2f}.hdf5', monitor='val_loss', save_best_only=True, mode='auto', save_weights_only=True, period=1, verbose=1)
+    model_checkpoint = ModelCheckpoint(filepath='models/' + save_prefix + str(learning_rate) + '_weights.{epoch:02d}-loss{loss:.3f}-{val_loss:.2f}.hdf5',
+                                       monitor='val_loss', save_best_only=True, mode='auto', save_weights_only=True, period=1, verbose=1)
     history = model.fit_generator(train_generator, validation_data=validation_generator,
-                                    steps_per_epoch=len(lbl_train)//64, epochs=15,
-                                    validation_steps=len(lbl_validn)//64,
+                                    steps_per_epoch=len(lbl_train)//batch_size, epochs=30,
+                                    validation_steps=len(lbl_validn)//batch_size,
                                     callbacks=[model_checkpoint])
     model.save_weights('models/'+save_prefix+str(learning_rate))

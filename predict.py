@@ -33,7 +33,7 @@ img_float -= 128
 
 img_in = np.expand_dims(img_float, axis=0)
 
-model = ResNet50(include_top=False, load_weight=True, weights='models/rerun9_0.01_weights.02-2.05.hdf5',
+model = ResNet50(include_top=False, load_weight=True, weights='models/run1_0.01_weights.14-loss21.738-21.50.hdf5',
                 input_shape=(224,224,3))
 pred = model.predict(img_in)
 
